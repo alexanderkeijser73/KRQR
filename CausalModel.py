@@ -21,19 +21,17 @@ class CausalModel(object):
 
     def addEntity(self, ent):
         if not isinstance(ent, Entity):
-            raise TypeError("Only objects of type Entity can be added to \
-                            the model")
+            raise TypeError("Only objects of type Entity can be added to the model")
         self.ents.append(ent)
 
 
     def addRel(self, qt_a, rel, qt_b):
         qts = self.getQts()
         if rel in CausalModel.pos_rels and qt_a in qts and qt_a in qts:
-            if (rel, qt_b.name) not in self.rels[qt_a.name]:
-                self.rels[qt_a.name].append((rel, qt_b.name))
+            if (rel, qt_a.name) not in self.rels[qt_b.name]:
+                self.rels[qt_b.name].append((rel, qt_a.name))     #key van dict is nu "ontvangende" quantity
         else:
-            raise ValueError("Either one of the quantities or the relationship \
-                                is not defined")
+            raise ValueError("Either one of the quantities or the relationship is not defined")
 
     def addVC(self, qt_a, val_a, qt_b, val_b):
         if qt_a.dom == 'zpm':
@@ -91,8 +89,7 @@ class Entity(object):
 
     def addQuantity(self, qt):
         if not isinstance(qt, Quantity):
-            raise TypeError("Only objects of type Quantity can be assigned to \
-                            the entity")
+            raise TypeError("Only objects of type Quantity can be assigned to the entity")
         self.qts.append(qt)
 
 class Quantity(object):
@@ -107,8 +104,7 @@ class Quantity(object):
         elif dom == 'zp':
             self.dom = 'zp'
         else:
-            raise ValueError("The only possible quantity domains are 'zpm' and \
-                            'zp'")
+            raise ValueError("The only possible quantity domains are 'zpm' and 'zp'")
         self.val = None
         self.delta = None
         self.name = name
@@ -118,14 +114,12 @@ class Quantity(object):
             if val in Quantity.zpdom:
                 self.val = val
             else:
-                raise ValueError("The only possible values for the domain 'zp' \
-                                are 0 (zero) and 1 (positive)")
+                raise ValueError("The only possible values for the domain 'zp' are 0 (zero) and 1 (positive)")
         else:
             if val in Quantity.zpmdom:
                 self.val = val
             else:
-                raise ValueError("The only possible values for the domain 'zpm'\
-                                are 0 (zero) , 1 (positive) and 2 (max)")
+                raise ValueError("The only possible values for the domain 'zpm' are 0 (zero) , 1 (positive) and 2 (max)")
 
     def increaseValue(self):
         boolean = False
@@ -158,8 +152,7 @@ class Quantity(object):
         if delta in Quantity.deltadom:
             self.delta = delta
         else:
-            raise ValueError("The only possible values for delta \
-                            are -1 (negative) 0 (zero) and 1 (positive)")
+            raise ValueError("The only possible values for delta are -1 (negative) 0 (zero) and 1 (positive)")
 
 
     def increaseDelta(self):
