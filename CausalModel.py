@@ -28,8 +28,8 @@ class CausalModel(object):
     def addRel(self, qt_a, rel, qt_b):
         qts = self.getQts()
         if rel in CausalModel.pos_rels and qt_a in qts and qt_a in qts:
-            if (rel, qt_a.name) not in self.rels[qt_b.name]:
-                self.rels[qt_b.name].append((rel, qt_a.name))     #key van dict is nu "ontvangende" quantity
+            if (rel, qt_a) not in self.rels[qt_b.name]:
+                self.rels[qt_b.name].append((rel, qt_a))     #key van dict is nu "ontvangende" quantity
         else:
             raise ValueError("Either one of the quantities or the relationship is not defined")
 
@@ -48,6 +48,17 @@ class CausalModel(object):
                 raise ValueError("Value of second quantity not valid")
         self.vc.append((qt_a, val_a, qt_b, val_b))
 
+    def checkValidVC(self, state):
+        valid = False
+        cvs = self.cv
+        for (qt_a, val_a, qt_b, val_b) in cvs:
+            for (qt1, val1, delta1) in state:
+                if qt1 == qt_a and val1 == val_a:
+                    for (qt2, val2, delta2) in state:
+                        if qt2 == qt_b and val2 == val_b:
+                            valid = True
+        # KLOPT NIET
+        return valid
 
     def getQts(self):
         return list(itertools.chain(*[ent.qts for ent in self.ents]))
@@ -60,30 +71,67 @@ class CausalModel(object):
         for val in vals:
             val[0].setValue(val[1])
             val[0].setDelta(val[2])
-        """DIKKE ERROR"""
+
 
     def generateStates(self):
         if beginStateKlopt:
             while notTerminated():
                 nextStates = self.nextStates()
                 self.stateGraph.append(nextStates)
-   
-    def findNextStatesPerQt(stateQt):#input is tuple (qt,val,delta)
-        nextValues = qt.updateValue()# todo  # list of values #afhankelijk van oude delta
-        nextDeltas = qt.updateDelta()# todo #list of deltas -> KAN AMBIGU ZIJN #afhankelijk van P en I
-        nextStatesPerQt = [(stateQt[0],i,j) for i in nextValues for j in nextDeltas] # lijst met tuples
-        return nextStatesPerQt
 
-     
-    def nextStates(self, prevstate):
+    # def findNextStatesPerQt(self, qt):
+    #     nextValues = qt.getNextValues()
+    #     nextDelta = qt.getNextDelta()
+    #     nextStatesPerQt = [(stateQt[0],i,nextDelta) for i in nextValues] # lijst met tuples
+    #     return nextStatesPerQt
+# next delta is nu waarde ipv list nog aanppassen
+
+    def nextStates(self):
+        # Error catcher????
         nextStates = [[]]
-        for (qt,val,delta) in prevstate:
-            nextStatesPerQt = findNextStatesPerQt((qt,val,delta)) # creates list with states
-            nextStates = [i+[j] for i in nextStates for j in nextStatesPerQt] 
+        qts = self.getQts()
+        for qt in qts:
+            nextValues = qt.getNextValues()
+            nextDelta = self.getNextDelta(qt)
+            nextStatesPerQt = [(qt,nextValue,nextDelta) for nextValue in nextValues]
+            # nextStatesPerQt = findNextStatesPerQt(qt) # creates list with states
+            nextStates = [i+[j] for i in nextStates for j in nextStatesPerQt]
         for state in nextStates:
-            if not checkValidCV(state): # todo
-                nextStates.flikkerEruit(state)  # todo     
+            if not checkValidVC(state): # todo
+                 nextStates.remove(state)  # todo
         return nextStates
+
+    def getNextDelta(self, qt_b):
+        rels = self.rels[qt_b.name]
+        signs = []
+        for (relType, qt_a) in rels:
+            val = qt_a.val
+            delta = qt_a.delta
+            if relType == 'i+':
+                if val != Quantity.zpmdom[0]:
+                    signs.append(1)
+            if relType == 'i-':
+                if val != Quantity.zpmdom[0]:
+                    signs.append(-1)
+            if relType == 'p+':
+                if delta != Quantity.deltadom[1]:
+                    signs.append(1)
+            if relType == 'p-':
+                if delta != Quantity.deltadom[1]:
+                    signs.append(-1)
+        if Quantity.deltadom[2] in signs and Quantity.deltadom[0] in signs:
+            raise ValueError('Shit is AMBIGU!')
+        new_delta = qt_b.delta
+        if Quantity.deltadom[2] in signs:
+            if new_delta != Quantity.deltadom[2]:
+                new_delta += 1
+        if Quantity.deltadom[0] in signs:
+            if new_delta != Quantity.deltadom[0]:
+                new_delta -= 1
+        return new_delta
+
+
+        # MISSCHIEN ERROR ALS DELTA/VALUE NIET TOEGESTAAN IS? OF NIET CHECKEN
 
 class Entity(object):
     """docstring for Entity."""
@@ -175,3 +223,23 @@ class Quantity(object):
             self.delta -= 1
             boolean = True
         return boolean
+
+    def getNextValues(self):
+        if self.delta == Quantity.deltadom[0]:
+            if self.val == Quantity.zpmdom[0]:      #same for zpmdom and zpdom
+                posvals = [self.val]
+            elif self.val == Quantity.zpmdom[1]:    #same for zpmdom and zpdom
+                posvals = [Quantity.zpmdom[0], Quantity.zpmdom[1]]
+            elif self.val == Quantity.zpmdom[2]:
+                posvals = [Quantity.zpmdom[1]]
+
+        elif self.delta == Quantity.deltadom[1]:
+            posvals = [self.val]
+        elif self.delta == Quantity.deltadom[2]:
+            if self.val == Quantity.zpmdom[0]:      #same for zpmdom and zpdom
+                posvals = [Quantity.zpmdom[1]]
+            elif self.val == Quantity.zpmdom[1]:    #same for zpmdom and zpdom
+                posvals = [Quantity.zpmdom[1], Quantity.zpmdom[2]]
+            elif self.val == Quantity.zpmdom[2]:
+                posvals = [self.val]
+        return posvals
