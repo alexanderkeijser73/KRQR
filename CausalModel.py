@@ -50,14 +50,24 @@ class CausalModel(object):
 
     def checkValidVC(self, state):
         valid = False
-        cvs = self.cv
+        cvs = self.vc
         for (qt_a, val_a, qt_b, val_b) in cvs:
+
+            # if qt_a.val == val_a and qt_b.val == val_b:
+            #     valid = True
+            # elif qt_a.val != val_a and qt_b.val != val_b:
+            #     valid = True
+
             for (qt1, val1, delta1) in state:
                 if qt1 == qt_a and val1 == val_a:
                     for (qt2, val2, delta2) in state:
                         if qt2 == qt_b and val2 == val_b:
                             valid = True
-        # KLOPT NIET
+
+                # if qt1 == qt_a and val1 == val_a:
+                # elif qt_1.val != val_a
+                #     and qt_b.val != val_b:
+                #             valid = True
         return valid
 
     def getQts(self):
@@ -91,47 +101,24 @@ class CausalModel(object):
         nextStates = [[]]
         qts = self.getQts()
         for qt in qts:
+            qt_rels = self.rels[qt.name]
             nextValues = qt.getNextValues()
-            nextDelta = self.getNextDelta(qt)
-            nextStatesPerQt = [(qt,nextValue,nextDelta) for nextValue in nextValues]
+            nextDelta = qt.getNextDelta(qt_rels)
+            nextStatesPerQt = [(qt,nextValue,nextDelta) for nextValue in nextValues]  #maybe deepcopy object or make dict
             # nextStatesPerQt = findNextStatesPerQt(qt) # creates list with states
             nextStates = [i+[j] for i in nextStates for j in nextStatesPerQt]
+
         for state in nextStates:
-            if not checkValidVC(state): # todo
+            if not self.checkValidVC(state): # todo
                  nextStates.remove(state)  # todo
         return nextStates
 
-    def getNextDelta(self, qt_b):
-        rels = self.rels[qt_b.name]
-        signs = []
-        for (relType, qt_a) in rels:
-            val = qt_a.val
-            delta = qt_a.delta
-            if relType == 'i+':
-                if val != Quantity.zpmdom[0]:
-                    signs.append(1)
-            if relType == 'i-':
-                if val != Quantity.zpmdom[0]:
-                    signs.append(-1)
-            if relType == 'p+':
-                if delta != Quantity.deltadom[1]:
-                    signs.append(1)
-            if relType == 'p-':
-                if delta != Quantity.deltadom[1]:
-                    signs.append(-1)
-        if Quantity.deltadom[2] in signs and Quantity.deltadom[0] in signs:
-            raise ValueError('Shit is AMBIGU!')
-        new_delta = qt_b.delta
-        if Quantity.deltadom[2] in signs:
-            if new_delta != Quantity.deltadom[2]:
-                new_delta += 1
-        if Quantity.deltadom[0] in signs:
-            if new_delta != Quantity.deltadom[0]:
-                new_delta -= 1
-        return new_delta
 
+class State(object):
+    """docstring for State."""
+    def __init__(self, statelist):
+        self.dict
 
-        # MISSCHIEN ERROR ALS DELTA/VALUE NIET TOEGESTAAN IS? OF NIET CHECKEN
 
 class Entity(object):
     """docstring for Entity."""
@@ -243,3 +230,31 @@ class Quantity(object):
             elif self.val == Quantity.zpmdom[2]:
                 posvals = [self.val]
         return posvals
+
+        def getNextDelta(self, rels):
+            signs = []
+            for (relType, qt_a) in rels:
+                val = qt_a.val
+                delta = qt_a.delta
+                if relType == 'i+':
+                    if val != Quantity.zpmdom[0]:
+                        signs.append(1)
+                if relType == 'i-':
+                    if val != Quantity.zpmdom[0]:
+                        signs.append(-1)
+                if relType == 'p+':
+                    if delta != Quantity.deltadom[1]:
+                        signs.append(1)
+                if relType == 'p-':
+                    if delta != Quantity.deltadom[1]:
+                        signs.append(-1)
+            if Quantity.deltadom[2] in signs and Quantity.deltadom[0] in signs:
+                raise ValueError('Shit is AMBIGU!')
+            new_delta = self.delta
+            if Quantity.deltadom[2] in signs:
+                if new_delta != Quantity.deltadom[2]:
+                    new_delta += 1
+            if Quantity.deltadom[0] in signs:
+                if new_delta != Quantity.deltadom[0]:
+                    new_delta -= 1
+            return new_delta
