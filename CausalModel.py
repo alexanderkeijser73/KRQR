@@ -231,30 +231,30 @@ class Quantity(object):
                 posvals = [self.val]
         return posvals
 
-        def getNextDelta(self, rels):
-            signs = []
-            for (relType, qt_a) in rels:
-                val = qt_a.val
-                delta = qt_a.delta
-                if relType == 'i+':
-                    if val != Quantity.zpmdom[0]:
-                        signs.append(1)
-                if relType == 'i-':
-                    if val != Quantity.zpmdom[0]:
-                        signs.append(-1)
-                if relType == 'p+':
-                    if delta != Quantity.deltadom[1]:
-                        signs.append(1)
-                if relType == 'p-':
-                    if delta != Quantity.deltadom[1]:
-                        signs.append(-1)
-            if Quantity.deltadom[2] in signs and Quantity.deltadom[0] in signs:
-                raise ValueError('Shit is AMBIGU!')
-            new_delta = self.delta
-            if Quantity.deltadom[2] in signs:
-                if new_delta != Quantity.deltadom[2]:
-                    new_delta += 1
-            if Quantity.deltadom[0] in signs:
-                if new_delta != Quantity.deltadom[0]:
-                    new_delta -= 1
-            return new_delta
+    def getNextDelta(self, rels):
+        signs = []
+        for (relType, qt_a) in rels:
+            val = qt_a.val
+            delta = qt_a.delta
+            if relType == 'i+':
+                if val != Quantity.zpmdom[0]:
+                    signs.append(1)
+            if relType == 'i-':
+                if val != Quantity.zpmdom[0]:
+                    signs.append(-1)
+            if relType == 'p+':
+                if delta != Quantity.deltadom[1]:
+                    signs.append(1)
+            if relType == 'p-':
+                if delta != Quantity.deltadom[1]:
+                    signs.append(-1)
+        if Quantity.deltadom[2] in signs and Quantity.deltadom[0] in signs:
+            raise ValueError('Shit is AMBIGU!')
+        new_delta = self.delta
+        if Quantity.deltadom[2] in signs:
+            if new_delta != Quantity.deltadom[2]:
+                new_delta += 1
+        if Quantity.deltadom[0] in signs:
+            if new_delta != Quantity.deltadom[0]:
+                new_delta -= 1
+        return new_delta
