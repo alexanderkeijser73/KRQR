@@ -67,17 +67,23 @@ class CausalModel(object):
             while notTerminated():
                 nextStates = self.nextStates()
                 self.stateGraph.append(nextStates)
+   
+    def findNextStatesPerQt(stateQt):#input is tuple (qt,val,delta)
+        nextValues = qt.updateValue()# todo  # list of values #afhankelijk van oude delta
+        nextDeltas = qt.updateDelta()# todo #list of deltas -> KAN AMBIGU ZIJN #afhankelijk van P en I
+        nextStatesPerQt = [(stateQt[0],i,j) for i in nextValues for j in nextDeltas] # lijst met tuples
+        return nextStatesPerQt
 
+     
     def nextStates(self, prevstate):
-        nextStates = []
+        nextStates = [[]]
         for (qt,val,delta) in prevstate:
-            nextValues = qt.updateValue()
-            nextDeltas = qt.updateDelta() #KAN AMBIGU ZIJN
-
-        nextStates = combineNextValuesAndDeltas()
+            nextStatesPerQt = findNextStatesPerQt((qt,val,delta)) # creates list with states
+            nextStates = [i+[j] for i in nextStates for j in nextStatesPerQt] 
         for state in nextStates:
-            if not checkValidCV(state):
-                nextStates.flikkerEruit(state)
+            if not checkValidCV(state): # todo
+                nextStates.flikkerEruit(state)  # todo     
+        return nextStates
 
 class Entity(object):
     """docstring for Entity."""
