@@ -1,6 +1,6 @@
 import itertools
 from collections import defaultdict
-
+from copy import deepcopy
 
 class CausalModel(object):
     """docstring for CausalModel"""
@@ -15,7 +15,7 @@ class CausalModel(object):
             rels = defaultdict(list)
         self.rels = rels
         if vc is None:
-            vc =[]
+            vc = defaultdict(list)
         self.vc = vc
 
 
@@ -26,7 +26,7 @@ class CausalModel(object):
 
 
     def addRel(self, qt_a, rel, qt_b):
-        qts = self.getQts()
+        qts = self.getState()
         if rel in CausalModel.pos_rels and qt_a in qts and qt_a in qts:
             if (rel, qt_a) not in self.rels[qt_b.name]:
                 self.rels[qt_b.name].append((rel, qt_a))     #key van dict is nu "ontvangende" quantity
@@ -34,48 +34,36 @@ class CausalModel(object):
             raise ValueError("Either one of the quantities or the relationship is not defined")
 
     def addVC(self, qt_a, val_a, qt_b, val_b):
-        if qt_a.dom == 'zpm':
-            if val_a not in Quantity.zpmdom:
+        qts = self.getState()
+        if qt_a in qts and qt_a in qts:
+            if val_a not in qt_a.dom[1]:
                 raise ValueError("Value of first quantity not valid")
-        else:
-            if val_a not in Quantity.zpdom:
-                raise ValueError("Value of first quantity not valid")
-        if qt_b.dom == 'zpm':
-            if val_b not in Quantity.zpmdom:
+            if val_b not in qt_b.dom[1]:
                 raise ValueError("Value of second quantity not valid")
-        else:
-            if val_b not in Quantity.zpdom:
-                raise ValueError("Value of second quantity not valid")
-        self.vc.append((qt_a, val_a, qt_b, val_b))
+            if (qt_b.name, val_a, val_b) not in self.vc[qt_a.name]:
+                self.vc[qt_a.name].append((qt_b.name, val_a, val_b))     #key van dict is nu "ontvangende" quantity
+            if (qt_a.name, val_b, val_a) not in self.vc[qt_b.name]:
+                self.vc[qt_b.name].append((qt_a.name, val_b, val_a))     #key van dict is nu "ontvangende" quantity
 
     def checkValidVC(self, state):
-        valid = False
-        cvs = self.vc
-        for (qt_a, val_a, qt_b, val_b) in cvs:
-
-            # if qt_a.val == val_a and qt_b.val == val_b:
-            #     valid = True
-            # elif qt_a.val != val_a and qt_b.val != val_b:
-            #     valid = True
-
-            for (qt1, val1, delta1) in state:
-                if qt1 == qt_a and val1 == val_a:
-                    for (qt2, val2, delta2) in state:
-                        if qt2 == qt_b and val2 == val_b:
-                            valid = True
-
-                # if qt1 == qt_a and val1 == val_a:
-                # elif qt_1.val != val_a
-                #     and qt_b.val != val_b:
-                #             valid = True
+        valid = True
+        for qt_a in state:
+            vcs = self.vc[qt_a.name]
+            for vc in vcs:
+                qt_b_name = vc[0]
+                qt_a_val = vc[1]
+                qt_b_val = vc[2]
+                for qt_b in state:
+                    if qt_b.name == qt_b_name:
+                        """Werkt niet omdat qt_a niet meer in state zit"""
+                        if not(qt_a == qt_a_val and qt_b.val == qt_b_val):
+                            valid = False
+                        elif not(qt_a.val != val_a and qt_b.val != val_b):
+                            valid = False
         return valid
 
-    def getQts(self):
-        return list(itertools.chain(*[ent.qts for ent in self.ents]))
-
     def getState(self):
-        qts = self.getQts()
-        return [(qt.name, qt.val, qt.delta) for qt in qts]
+        return list(itertools.chain(*[ent.qts for ent in self.ents]))
 
     def setState(self, vals):
         for val in vals:
@@ -83,31 +71,32 @@ class CausalModel(object):
             val[0].setDelta(val[2])
 
 
-    def generateStates(self):
-        if beginStateKlopt:
-            while notTerminated():
-                nextStates = self.nextStates()
-                self.stateGraph.append(nextStates)
+    def generateStates(self, init_state):
+        # if beginStateKlopt:
+        notTerminated = True
+        states = [init_state]
+        for
+            nextStates = self.nextStates()
+            self.stateGraph.append(nextStates)
 
-    # def findNextStatesPerQt(self, qt):
-    #     nextValues = qt.getNextValues()
-    #     nextDelta = qt.getNextDelta()
-    #     nextStatesPerQt = [(stateQt[0],i,nextDelta) for i in nextValues] # lijst met tuples
-    #     return nextStatesPerQt
-# next delta is nu waarde ipv list nog aanppassen
 
-    def nextStates(self):
+    def nextStates(self,state):
         # Error catcher????
         nextStates = [[]]
-        qts = self.getQts()
-        for qt in qts:
+        for qt in state:
             qt_rels = self.rels[qt.name]
             nextValues = qt.getNextValues()
             nextDelta = qt.getNextDelta(qt_rels)
-            nextStatesPerQt = [(qt,nextValue,nextDelta) for nextValue in nextValues]  #maybe deepcopy object or make dict
-            # nextStatesPerQt = findNextStatesPerQt(qt) # creates list with states
+            print(qt.name)
+            print("nextValues: {}".format(nextValues))
+            print("nextDelta: {}\n".format(nextDelta))
+            nextStatesPerQt = []
+            for nextValue in nextValues:
+                qtcopy = deepcopy(qt)
+                qtcopy.setDelta(nextDelta)
+                qtcopy.setValue(nextValue)
+                nextStatesPerQt.append(qtcopy)
             nextStates = [i+[j] for i in nextStates for j in nextStatesPerQt]
-
         for state in nextStates:
             if not self.checkValidVC(state): # todo
                  nextStates.remove(state)  # todo
@@ -141,9 +130,9 @@ class Quantity(object):
 
     def __init__(self, name, dom=None):
         if dom is None:
-            self.dom = 'zpm'
+            self.dom = ('zpm',Quantity.zpmdom)
         elif dom == 'zp':
-            self.dom = 'zp'
+            self.dom = ('zp',Quantity.zpdom)
         else:
             raise ValueError("The only possible quantity domains are 'zpm' and 'zp'")
         self.val = None
@@ -151,43 +140,16 @@ class Quantity(object):
         self.name = name
 
     def setValue(self, val):
-        if self.dom == 'zp':
-            if val in Quantity.zpdom:
-                self.val = val
-            else:
-                raise ValueError("The only possible values for the domain 'zp' are 0 (zero) and 1 (positive)")
+        if val in self.dom[1]:
+            self.val = val
         else:
-            if val in Quantity.zpmdom:
-                self.val = val
-            else:
-                raise ValueError("The only possible values for the domain 'zpm' are 0 (zero) , 1 (positive) and 2 (max)")
+            raise ValueError("The only possible values for the domain {} are {}".format(self.dom[0], self.dom[1]))
 
     def increaseValue(self):
-        boolean = False
-        if self.dom  == 'zpm':
-            if self.val + 1 in Quantity.zpmdom:
-                self.val += 1
-                boolean = True
-        else:
-            if self.val + 1 in Quantity.zpdom:
-                self.val += 1
-                boolean = True
-        return boolean
-
+        return (self.val + 1 in self.dom[1])
 
     def decreaseValue(self):
-        if self.dom  == 'zpm':
-            if self.val - 1 in Quantity.zpmdom:
-                self.val -= 1
-                return True
-            else:
-                return False
-        else:
-            if self.val - 1 in Quantity.zpdom:
-                self.val -= 1
-                return True
-            else:
-                return False
+        return (self.val - 1 in self.dom[1])
 
     def setDelta(self, delta):
         if delta in Quantity.deltadom:
@@ -197,37 +159,28 @@ class Quantity(object):
 
 
     def increaseDelta(self):
-        boolean = False
-        if self.delta + 1 in Quantity.deltadom:
-            self.delta += 1
-            boolean = True
-        return boolean
+        return (self.delta + 1 in Quantity.deltadom)
 
 
     def decreaseDelta(self):
-        boolean = False
-        if self.delta - 1 in Quantity.deltadom:
-            self.delta -= 1
-            boolean = True
-        return boolean
+        return (self.delta - 1 in Quantity.deltadom)
 
     def getNextValues(self):
-        if self.delta == Quantity.deltadom[0]:
-            if self.val == Quantity.zpmdom[0]:      #same for zpmdom and zpdom
+        if self.delta == -1:      #check if derivative is negative
+            if self.decreaseValue():
+                posvals = [self.val, self.val-1]
+            else:
+                """CHECK OF DIT HOORT"""
+                self.setDelta(0)
                 posvals = [self.val]
-            elif self.val == Quantity.zpmdom[1]:    #same for zpmdom and zpdom
-                posvals = [Quantity.zpmdom[0], Quantity.zpmdom[1]]
-            elif self.val == Quantity.zpmdom[2]:
-                posvals = [Quantity.zpmdom[1]]
-
-        elif self.delta == Quantity.deltadom[1]:
+        elif self.delta == 0:    #check if derivative is zero
             posvals = [self.val]
-        elif self.delta == Quantity.deltadom[2]:
-            if self.val == Quantity.zpmdom[0]:      #same for zpmdom and zpdom
-                posvals = [Quantity.zpmdom[1]]
-            elif self.val == Quantity.zpmdom[1]:    #same for zpmdom and zpdom
-                posvals = [Quantity.zpmdom[1], Quantity.zpmdom[2]]
-            elif self.val == Quantity.zpmdom[2]:
+        else:
+            if self.increaseValue():
+                posvals = [self.val, self.val+1]
+            else:
+                """CHECK OF DIT HOORT"""
+                self.setDelta(0)
                 posvals = [self.val]
         return posvals
 
@@ -237,24 +190,24 @@ class Quantity(object):
             val = qt_a.val
             delta = qt_a.delta
             if relType == 'i+':
-                if val != Quantity.zpmdom[0]:
+                if val != 0:
                     signs.append(1)
             if relType == 'i-':
-                if val != Quantity.zpmdom[0]:
+                if val != 0:
                     signs.append(-1)
             if relType == 'p+':
-                if delta != Quantity.deltadom[1]:
+                if delta != 0:
                     signs.append(1)
             if relType == 'p-':
-                if delta != Quantity.deltadom[1]:
+                if delta != 0:
                     signs.append(-1)
-        if Quantity.deltadom[2] in signs and Quantity.deltadom[0] in signs:
+        if 1 in signs and -1 in signs:
             raise ValueError('Shit is AMBIGU!')
         new_delta = self.delta
-        if Quantity.deltadom[2] in signs:
-            if new_delta != Quantity.deltadom[2]:
+        if 1 in signs:
+            if new_delta != 1:
                 new_delta += 1
-        if Quantity.deltadom[0] in signs:
-            if new_delta != Quantity.deltadom[0]:
+        if -1 in signs:
+            if new_delta != -1:
                 new_delta -= 1
         return new_delta
