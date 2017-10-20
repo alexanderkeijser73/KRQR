@@ -85,8 +85,6 @@ class CausalModel(object):
             for branch in state_tree:
                 nextStates = self.nextStates(branch[-1])
                 #nextStates, not_terminated = self.nextStates(branch[-1])
-                
-                #print([(qt.name,qt.val,qt.delta) for qt in branch[-1]])
                 temp_state_tree = []
                 for state in nextStates:
                     temp_branch = branch + [state]
@@ -99,6 +97,7 @@ class CausalModel(object):
         # Error catcher????
         print("start state: ", [(qt.name,qt.val,qt.delta) for qt in state])
         nextStates = [[]]
+        
         for qt in state:
             qt_rels = self.rels[qt.name]
             nextValues = qt.getNextValues()
@@ -115,7 +114,7 @@ class CausalModel(object):
                 qtcopy.setValue(nextValue)
                 nextStatesPerQt.append(qtcopy)
             nextStates = [i+[j] for i in nextStates for j in nextStatesPerQt]
-# Ik stop eerst alle niet valid states in een list want anders gaat hij niet goed door alles states loopen.. het gaat dan ergens fout met de indices 
+
         nonValidStates = []
         for state in nextStates:
             if not self.checkValidVC(state):
