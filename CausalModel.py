@@ -55,7 +55,6 @@ class CausalModel(object):
                 qt_b_val = vc[2]
                 for qt_b in state:
                     if qt_b.name == qt_b_name:
-# het klopte hier niet helemaal met de variabelen dus ik heb dat aangepast
                         if qt_a.val == qt_a_val and qt_b.val != qt_b_val:
                             valid = False
                         elif qt_a.val != qt_a_val and qt_b.val == qt_b_val:
@@ -70,6 +69,15 @@ class CausalModel(object):
             val[0].setValue(val[1])
             val[0].setDelta(val[2])
 
+    def isSame(self, nextState, state):
+        is_same = True 
+        for i in range(len(nextState)):
+            qt1 = nextState[i]
+            qt2 = state[i]
+            if qt1.val != qt2.val or qt1.delta != qt2.delta:
+                is_same = False
+        return is_same
+
 
     def generateStates(self, init_state):
         #if not(validState(init_state)): 
@@ -78,35 +86,39 @@ class CausalModel(object):
         not_terminated = True
         count = 0
         while not_terminated:
+            # de count mag eruit maar dan gaat hij wel forever door.. dus pas op!
             print(count, "-------------------------------------------")
             count +=1
-            if count ==2:
-                not_terminated = False
             for branch in state_tree:
-                nextStates = self.nextStates(branch[-1])
-                #nextStates, not_terminated = self.nextStates(branch[-1])
+                nextStates, not_terminated = self.nextStates(branch[-1])
+                # not_terminated checkt of hij ambigu is
+                # en of de state hetzelfde is als de nieuwe state.. 
+                # maar omdat hij de nieuwe state verkeerd in de list zet (zie hieronder + frustratie)
+                # werkt het niet omdat de state elke keer anders is
                 temp_state_tree = []
                 for state in nextStates:
-                    temp_branch = branch + [state]
+#FRUSTRATIE:
+                    # het lijkt wel alsof hij bij de laatste state hem niet aan het einde maar er tussen zet..
+                    # snap  niet waarom en ik wordt hier helemaal gek.. dus ga morgen weer hier een blik opwerpen
                     temp_state_tree.append(branch + [state])
+            if count ==10:
+                not_terminated = False
             state_tree = temp_state_tree
         return state_tree
 
 
     def nextStates(self,state):
         # Error catcher????
-        print("start state: ", [(qt.name,qt.val,qt.delta) for qt in state])
         nextStates = [[]]
-        
         for qt in state:
             qt_rels = self.rels[qt.name]
             nextValues = qt.getNextValues()
             nextDelta = qt.getNextDelta(qt_rels) 
-            #nextDelta, ambiguous = qt.getNextDelta(qt_rels)
-            #if ambiguous: break
-            print(qt.name)
-            print("nextValues: {}".format(nextValues))
-            print("nextDelta: {}\n".format(nextDelta))
+            nextDelta, ambiguous = qt.getNextDelta(qt_rels)
+            if ambiguous: break
+            #print(qt.name)
+            #print("nextValues: {}".format(nextValues))
+            #print("nextDelta: {}\n".format(nextDelta))
             nextStatesPerQt = []
             for nextValue in nextValues:
                 qtcopy = deepcopy(qt)
@@ -114,14 +126,14 @@ class CausalModel(object):
                 qtcopy.setValue(nextValue)
                 nextStatesPerQt.append(qtcopy)
             nextStates = [i+[j] for i in nextStates for j in nextStatesPerQt]
-
-        nonValidStates = []
-        for state in nextStates:
-            if not self.checkValidVC(state):
-                nonValidStates.append(state)
-        for state in nonValidStates:
-            nextStates.remove(state)
-        return nextStates#, not(ambiguous)
+        if not(ambiguous):
+            nonValidStates = []
+            for nextState in nextStates:
+                if not(self.checkValidVC(nextState)) or self.isSame(nextState, state):
+                    nonValidStates.append(nextState)
+            for nextState in nonValidStates:
+                nextStates.remove(nextState)
+        return nextStates, not(ambiguous)
 
 
 class State(object):
@@ -178,35 +190,39 @@ class Quantity(object):
         else:
             raise ValueError("The only possible values for delta are -1 (negative) 0 (zero) and 1 (positive)")
 
+# deze gebruiken we niet meer:
+    #def increaseDelta(self):
+        #return (self.delta + 1 in Quantity.deltadom)
+    #def decreaseDelta(self):
+        #return (self.delta - 1 in Quantity.deltadom)    
 
-    def increaseDelta(self):
-        return (self.delta + 1 in Quantity.deltadom)
-
-
-    def decreaseDelta(self):
-        return (self.delta - 1 in Quantity.deltadom)
-
+    
     def getNextValues(self):
         if self.delta == -1:      #check if derivative is negative
-            if self.decreaseValue():
-                posvals = [self.val, self.val-1]
+            if self.val == Quantity.zpmdom[2]:
+                posvals = [self.val-1]
+            elif self.val == Quantity.zpmdom[1]:
+                posvals = [self.val-1, self.val]
+                # self.setDelta(0) moet in bepaalde tak komen..
             else:
-                """CHECK OF DIT HOORT"""
                 self.setDelta(0)
                 posvals = [self.val]
         elif self.delta == 0:    #check if derivative is zero
             posvals = [self.val]
         else:
-            if self.increaseValue():
+            if self.val == Quantity.zpmdom[0]:
+                posvals = [self.val+1]
+            elif self.val == Quantity.zpmdom[1]:
                 posvals = [self.val, self.val+1]
+                # self.setDelta(0) moet in bepaalde tak komen..
             else:
-                """CHECK OF DIT HOORT"""
                 self.setDelta(0)
                 posvals = [self.val]
         return posvals
 
+    
     def getNextDelta(self, rels):
-        #ambiguous = False
+        ambiguous = False
         signs = []
         for (relType, qt_a) in rels:
             val = qt_a.val
@@ -224,8 +240,8 @@ class Quantity(object):
                 if delta != 0:
                     signs.append(-1)
         if 1 in signs and -1 in signs:
-            raise ValueError('Shit is AMBIGU!')
-            #ambiguous = True
+            #raise ValueError('Shit is AMBIGU!')
+            ambiguous = True
         new_delta = self.delta
         if 1 in signs:
             if new_delta != 1:
@@ -233,4 +249,4 @@ class Quantity(object):
         if -1 in signs:
             if new_delta != -1:
                 new_delta -= 1
-        return new_delta #, ambiguous
+        return new_delta , ambiguous
