@@ -55,10 +55,10 @@ class CausalModel(object):
                 qt_b_val = vc[2]
                 for qt_b in state:
                     if qt_b.name == qt_b_name:
-                        """Werkt niet omdat qt_a niet meer in state zit"""
-                        if not(qt_a == qt_a_val and qt_b.val == qt_b_val):
+# het klopte hier niet helemaal met de variabelen dus ik heb dat aangepast
+                        if qt_a.val == qt_a_val and qt_b.val != qt_b_val:
                             valid = False
-                        elif not(qt_a.val != val_a and qt_b.val != val_b):
+                        elif qt_a.val != qt_a_val and qt_b.val == qt_b_val:
                             valid = False
         return valid
 
@@ -72,21 +72,39 @@ class CausalModel(object):
 
 
     def generateStates(self, init_state):
-        # if beginStateKlopt:
-        notTerminated = True
-        states = [init_state]
-        for
-            nextStates = self.nextStates()
-            self.stateGraph.append(nextStates)
+        #if not(validState(init_state)): 
+            #raise ValueError("Init state is not valid")
+        state_tree  = [[init_state]]
+        not_terminated = True
+        count = 0
+        while not_terminated:
+            print(count, "-------------------------------------------")
+            count +=1
+            if count ==2:
+                not_terminated = False
+            for branch in state_tree:
+                nextStates = self.nextStates(branch[-1])
+                #nextStates, not_terminated = self.nextStates(branch[-1])
+                
+                #print([(qt.name,qt.val,qt.delta) for qt in branch[-1]])
+                temp_state_tree = []
+                for state in nextStates:
+                    temp_branch = branch + [state]
+                    temp_state_tree.append(branch + [state])
+            state_tree = temp_state_tree
+        return state_tree
 
 
     def nextStates(self,state):
         # Error catcher????
+        print("start state: ", [(qt.name,qt.val,qt.delta) for qt in state])
         nextStates = [[]]
         for qt in state:
             qt_rels = self.rels[qt.name]
             nextValues = qt.getNextValues()
-            nextDelta = qt.getNextDelta(qt_rels)
+            nextDelta = qt.getNextDelta(qt_rels) 
+            #nextDelta, ambiguous = qt.getNextDelta(qt_rels)
+            #if ambiguous: break
             print(qt.name)
             print("nextValues: {}".format(nextValues))
             print("nextDelta: {}\n".format(nextDelta))
@@ -97,10 +115,14 @@ class CausalModel(object):
                 qtcopy.setValue(nextValue)
                 nextStatesPerQt.append(qtcopy)
             nextStates = [i+[j] for i in nextStates for j in nextStatesPerQt]
+# Ik stop eerst alle niet valid states in een list want anders gaat hij niet goed door alles states loopen.. het gaat dan ergens fout met de indices 
+        nonValidStates = []
         for state in nextStates:
-            if not self.checkValidVC(state): # todo
-                 nextStates.remove(state)  # todo
-        return nextStates
+            if not self.checkValidVC(state):
+                nonValidStates.append(state)
+        for state in nonValidStates:
+            nextStates.remove(state)
+        return nextStates#, not(ambiguous)
 
 
 class State(object):
@@ -185,6 +207,7 @@ class Quantity(object):
         return posvals
 
     def getNextDelta(self, rels):
+        #ambiguous = False
         signs = []
         for (relType, qt_a) in rels:
             val = qt_a.val
@@ -203,6 +226,7 @@ class Quantity(object):
                     signs.append(-1)
         if 1 in signs and -1 in signs:
             raise ValueError('Shit is AMBIGU!')
+            #ambiguous = True
         new_delta = self.delta
         if 1 in signs:
             if new_delta != 1:
@@ -210,4 +234,4 @@ class Quantity(object):
         if -1 in signs:
             if new_delta != -1:
                 new_delta -= 1
-        return new_delta
+        return new_delta #, ambiguous
