@@ -70,7 +70,7 @@ class CausalModel(object):
             val[0].setDelta(val[2])
 
     def isSame(self, nextState, state):
-        is_same = True 
+        is_same = True
         for i in range(len(nextState)):
             qt1 = nextState[i]
             qt2 = state[i]
@@ -80,28 +80,29 @@ class CausalModel(object):
 
 
     def generateStates(self, init_state):
-        #if not(validState(init_state)): 
+        #if not(validState(init_state)):
             #raise ValueError("Init state is not valid")
         state_tree  = [[init_state]]
         not_terminated = True
         count = 0
         while not_terminated:
             # de count mag eruit maar dan gaat hij wel forever door.. dus pas op!
-            print(count, "-------------------------------------------")
+            print(count+1, "-------------------------------------------")
             count +=1
+            temp_state_tree = []
             for branch in state_tree:
-                nextStates, not_terminated = self.nextStates(branch[-1])
-                # not_terminated checkt of hij ambigu is
-                # en of de state hetzelfde is als de nieuwe state.. 
-                # maar omdat hij de nieuwe state verkeerd in de list zet (zie hieronder + frustratie)
-                # werkt het niet omdat de state elke keer anders is
-                temp_state_tree = []
-                for state in nextStates:
-#FRUSTRATIE:
-                    # het lijkt wel alsof hij bij de laatste state hem niet aan het einde maar er tussen zet..
-                    # snap  niet waarom en ik wordt hier helemaal gek.. dus ga morgen weer hier een blik opwerpen
-                    temp_state_tree.append(branch + [state])
-            if count ==10:
+                deltas = [qt.delta for qt in branch[-1]]
+                # state moet ook terminaten als alle afgeleiden 0 zijn
+                if (-1 in deltas) or (1 in deltas):
+                    #     break
+                    nextStates, not_terminated = self.nextStates(branch[-1])
+                    # not_terminated checkt of hij ambigu is
+                    # en of de state hetzelfde is als de nieuwe state..
+                    # maar omdat hij de nieuwe state verkeerd in de list zet (zie hieronder + frustratie)
+                    # werkt het niet omdat de state elke keer anders is
+                    for state in nextStates:
+                        temp_state_tree.append(branch + [state])
+            if count ==3:
                 not_terminated = False
             state_tree = temp_state_tree
         return state_tree
@@ -111,14 +112,18 @@ class CausalModel(object):
         # Error catcher????
         nextStates = [[]]
         for qt in state:
+            """ Misschien moet dit weg"""
+            ambiguous = False
             qt_rels = self.rels[qt.name]
-            nextValues = qt.getNextValues()
-            nextDelta = qt.getNextDelta(qt_rels) 
-            nextDelta, ambiguous = qt.getNextDelta(qt_rels)
-            if ambiguous: break
-            #print(qt.name)
-            #print("nextValues: {}".format(nextValues))
-            #print("nextDelta: {}\n".format(nextDelta))
+            nextValues, nextDelta = qt.getNextValues()
+            # nextDelta = qt.getNextDelta(qt_rels)
+            if nextDelta is None:
+                nextDelta, ambiguous = qt.getNextDelta(qt_rels)
+            if ambiguous:
+                print(qt.name)
+                break
+            # print("nextValues for {}: {}".format(qt.name,nextValues))
+            # print("nextDelta for {}: {}\n".format(qt.name, nextDelta))
             nextStatesPerQt = []
             for nextValue in nextValues:
                 qtcopy = deepcopy(qt)
@@ -126,6 +131,7 @@ class CausalModel(object):
                 qtcopy.setValue(nextValue)
                 nextStatesPerQt.append(qtcopy)
             nextStates = [i+[j] for i in nextStates for j in nextStatesPerQt]
+            # print("Shape nextStates: ".format(shape(nextStates)))
         if not(ambiguous):
             nonValidStates = []
             for nextState in nextStates:
@@ -194,33 +200,56 @@ class Quantity(object):
     #def increaseDelta(self):
         #return (self.delta + 1 in Quantity.deltadom)
     #def decreaseDelta(self):
-        #return (self.delta - 1 in Quantity.deltadom)    
+        #return (self.delta - 1 in Quantity.deltadom)
 
-    
+
+    # def getNextValues(self):
+    #     delta = None
+    #     if self.delta == -1:      #check if derivative is negative
+    #         if self.val == Quantity.zpmdom[2]:
+    #             posvals = [self.val-1]
+    #         elif self.val == Quantity.zpmdom[1]:
+    #             posvals = [self.val-1, self.val]
+    #             # self.setDelta(0) moet in bepaalde tak komen..
+    #         else:
+    #             delta = 0
+    #             posvals = [self.val]
+    #     elif self.delta == 0:    #check if derivative is zero
+    #         posvals = [self.val]
+    #     else:
+    #         if self.val == Quantity.zpmdom[0]:
+    #             posvals = [self.val+1]
+    #         elif self.val == Quantity.zpmdom[1]:
+    #             posvals = [self.val, self.val+1]
+    #             # self.setDelta(0) moet in bepaalde tak komen..
+    #         else:
+    #             delta = 0
+    #             posvals = [self.val]
+    #     return posvals, delta
     def getNextValues(self):
+        delta = None
         if self.delta == -1:      #check if derivative is negative
-            if self.val == Quantity.zpmdom[2]:
-                posvals = [self.val-1]
-            elif self.val == Quantity.zpmdom[1]:
-                posvals = [self.val-1, self.val]
-                # self.setDelta(0) moet in bepaalde tak komen..
+            if self.decreaseValue():
+                posvals = [self.val, self.val-1]
             else:
-                self.setDelta(0)
+                """CHECK OF DIT HOORT"""
+                delta = 0
+                # self.setDelta(0)
                 posvals = [self.val]
         elif self.delta == 0:    #check if derivative is zero
             posvals = [self.val]
         else:
-            if self.val == Quantity.zpmdom[0]:
-                posvals = [self.val+1]
-            elif self.val == Quantity.zpmdom[1]:
+            if self.increaseValue():
                 posvals = [self.val, self.val+1]
-                # self.setDelta(0) moet in bepaalde tak komen..
             else:
-                self.setDelta(0)
+                """CHECK OF DIT HOORT"""
+                delta = 0
+                # self.setDelta(0)
                 posvals = [self.val]
-        return posvals
+        return posvals, delta
 
-    
+
+
     def getNextDelta(self, rels):
         ambiguous = False
         signs = []
