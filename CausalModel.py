@@ -80,22 +80,38 @@ class CausalModel(object):
         states_to_explore = [init_state]
         connections = []
         while len(states_to_explore) > 0:
+
+            print("States to explore: \n")
+            for bli in states_to_explore:
+                print(bli.toTuples())
+            print("\n")
+            new_states_to_explore = []
             for state in states_to_explore:
                 next_states = self.nextStates(state)
+                # print("New connections:\n")
+                # for bleh in next_states:
+                #     print(bleh.toTuples(),"connected with \n")
+                #     print(state.toTuples(),"\n")
                 state_connections = [(state,next_state) for next_state in next_states]
                 for next_state in next_states:
                     deltas = [qt.delta for qt in next_state.asList]
                     explored_state_vals = [explored_state.toTuples() for explored_state in explored_states]
                     if not next_state.toTuples() in explored_state_vals:
-                        states_to_explore.append(next_state)
+                        new_states_to_explore.append(next_state)
                     # else: print("Already explored: {}\n".format(next_state.toTuples()))
                     # else: print("Derivative termination")
                 if not state in explored_states:
                     explored_states.append(state)
-                print("All explored states: {}\n".format(explored_state_vals))
+                # print("All explored states: {}\n".format(explored_state_vals))
                 # else: print("Already in explored states\n")
-                states_to_explore.remove(state)
-            print("States to explore: ",[state.toTuples() for state in states_to_explore], "\n")
+                # states_to_explore.remove(state)
+            states_to_explore = new_states_to_explore
+            explored_state_vals = [explored_state.toTuples() for explored_state in explored_states]
+            print("All explored states:\n")
+            for bla in explored_state_vals:
+                print(bla)
+            print("\n------------------------------------------------------------\n")
+            # print("States to explore: ",[state.toTuples() for state in states_to_explore], "\n")
         return explored_states, connections
 
     def nextStates(self,state):
@@ -243,7 +259,7 @@ class Quantity(object):
                 posvals = [self.val]
         elif self.delta == 0:    #check if derivative is zero
             posvals = [self.val]
-        else:
+        else:                    #derivative is positive
             if self.increaseValue():
                 if self.val == Quantity.zpmdom[0]:
                     """EPSILON ORDERING"""
@@ -272,11 +288,15 @@ class Quantity(object):
                 if val != 0:
                     signs.append(-1)
             if relType == 'p+':
-                if delta != 0:
+                if delta == 1:
                     signs.append(1)
-            if relType == 'p-':
-                if delta != 0:
+                elif delta == -1:
                     signs.append(-1)
+            if relType == 'p-':
+                if delta == 1:
+                    signs.append(-1)
+                elif delta == -1:
+                    signs.append(1)
         if 1 in signs and -1 in signs:
             #raise ValueError('Shit is AMBIGU!')
             ambiguous = True
