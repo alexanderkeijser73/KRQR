@@ -27,7 +27,7 @@ class CausalModel(object):
 
     def addRel(self, qt_a, rel, qt_b):
         qts = self.getState()
-        if rel in CausalModel.pos_rels and qt_a in qts and qt_a in qts:
+        if rel in CausalModel.pos_rels and qt_a in qts.asList and qt_a in qts.asList:
             if (rel, qt_a) not in self.rels[qt_b.name]:
                 self.rels[qt_b.name].append((rel, qt_a))     #key van dict is nu "ontvangende" quantity
         else:
@@ -35,7 +35,7 @@ class CausalModel(object):
 
     def addVC(self, qt_a, val_a, qt_b, val_b):
         qts = self.getState()
-        if qt_a in qts and qt_a in qts:
+        if qt_a in qts.asList and qt_a in qts.asList:
             if val_a not in qt_a.dom[1]:
                 raise ValueError("Value of first quantity not valid")
             if val_b not in qt_b.dom[1]:
@@ -62,90 +62,90 @@ class CausalModel(object):
         return valid
 
     def getState(self):
-        return list(itertools.chain(*[ent.qts for ent in self.ents]))
+        return State(list(itertools.chain(*[ent.qts for ent in self.ents])))
 
     def setState(self, vals):
         for val in vals:
             val[0].setValue(val[1])
             val[0].setDelta(val[2])
 
-    def isSame(self, nextState, state):
-        is_same = True
-        for i in range(len(nextState)):
-            qt1 = nextState[i]
-            qt2 = state[i]
-            if qt1.val != qt2.val or qt1.delta != qt2.delta:
-                is_same = False
-        return is_same
+    @staticmethod
+    def isSame(nextState, state):
+        return nextState.toTuples() == state.toTuples()
 
 
     def generateStates(self, init_state):
-        #if not(validState(init_state)):
-            #raise ValueError("Init state is not valid")
-        state_tree  = [[init_state]]
-        not_terminated = True
-        count = 0
-        while not_terminated:
-            # de count mag eruit maar dan gaat hij wel forever door.. dus pas op!
-            print(count+1, "-------------------------------------------")
-            count +=1
-            temp_state_tree = []
-            for branch in state_tree:
-                deltas = [qt.delta for qt in branch[-1]]
-                # state moet ook terminaten als alle afgeleiden 0 zijn
-                if (-1 in deltas) or (1 in deltas):
-                    #     break
-                    nextStates, not_terminated = self.nextStates(branch[-1])
-                    # not_terminated checkt of hij ambigu is
-                    # en of de state hetzelfde is als de nieuwe state..
-                    # maar omdat hij de nieuwe state verkeerd in de list zet (zie hieronder + frustratie)
-                    # werkt het niet omdat de state elke keer anders is
-                    for state in nextStates:
-                        temp_state_tree.append(branch + [state])
-            if count ==3:
-                not_terminated = False
-            state_tree = temp_state_tree
-        return state_tree
-
+        # error catcher???
+        explored_states = []
+        states_to_explore = [init_state]
+        connections = []
+        while len(states_to_explore) > 0:
+            for state in states_to_explore:
+                next_states = self.nextStates(state)
+                state_connections = [(state,next_state) for next_state in next_states]
+                for next_state in next_states:
+                    deltas = [qt.delta for qt in next_state.asList]
+                    explored_state_vals = [explored_state.toTuples() for explored_state in explored_states]
+                    if not next_state.toTuples() in explored_state_vals:
+                        states_to_explore.append(next_state)
+                    # else: print("Already explored: {}\n".format(next_state.toTuples()))
+                    # else: print("Derivative termination")
+                if not state in explored_states:
+                    explored_states.append(state)
+                print("All explored states: {}\n".format(explored_state_vals))
+                # else: print("Already in explored states\n")
+                states_to_explore.remove(state)
+            print("States to explore: ",[state.toTuples() for state in states_to_explore], "\n")
+        return explored_states, connections
 
     def nextStates(self,state):
-        # Error catcher????
         nextStates = [[]]
-        for qt in state:
-            """ Misschien moet dit weg"""
+        for qt in state.asList:
             ambiguous = False
             qt_rels = self.rels[qt.name]
-            nextValues, nextDelta = qt.getNextValues()
+            nextValues, nextDeltas = qt.getNextValues()
             # nextDelta = qt.getNextDelta(qt_rels)
-            if nextDelta is None:
-                nextDelta, ambiguous = qt.getNextDelta(qt_rels)
+            if nextDeltas is None:
+                nextDeltas, ambiguous = qt.getNextDelta(qt_rels)
             if ambiguous:
-                print(qt.name)
                 break
             # print("nextValues for {}: {}".format(qt.name,nextValues))
-            # print("nextDelta for {}: {}\n".format(qt.name, nextDelta))
+            # print("nextDelta for {}: {}\n".format(qt.name, nextDeltas))
             nextStatesPerQt = []
-            for nextValue in nextValues:
-                qtcopy = deepcopy(qt)
-                qtcopy.setDelta(nextDelta)
-                qtcopy.setValue(nextValue)
-                nextStatesPerQt.append(qtcopy)
+            for nextDelta in nextDeltas:
+                for nextValue in nextValues:
+                    qtcopy = deepcopy(qt)
+                    qtcopy.setDelta(nextDelta)
+                    qtcopy.setValue(nextValue)
+                    nextStatesPerQt.append(qtcopy)
             nextStates = [i+[j] for i in nextStates for j in nextStatesPerQt]
             # print("Shape nextStates: ".format(shape(nextStates)))
         if not(ambiguous):
             nonValidStates = []
             for nextState in nextStates:
-                if not(self.checkValidVC(nextState)) or self.isSame(nextState, state):
+                if not(self.checkValidVC(nextState)) or CausalModel.isSame(State(nextState), state):
                     nonValidStates.append(nextState)
             for nextState in nonValidStates:
                 nextStates.remove(nextState)
-        return nextStates, not(ambiguous)
+        nextStatesAsStateObjs = [State(state) for state in nextStates]
+        return nextStatesAsStateObjs
 
 
 class State(object):
     """docstring for State."""
-    def __init__(self, statelist):
-        self.dict
+    def __init__(self, qts=None):
+        if qts is None:
+            qts = []
+        self.asList = qts
+        # self.parent = None
+        # self.children = None
+
+    def toTuples(self):
+        qts = self.asList
+        return [(qt.name,qt.val,qt.delta) for qt in qts]
+
+    def addQt(self, qt):
+        return self.asList.append(qt)
 
 
 class Entity(object):
@@ -177,6 +177,7 @@ class Quantity(object):
         self.val = None
         self.delta = None
         self.name = name
+        self.exog = False
 
     def setValue(self, val):
         if val in self.dom[1]:
@@ -196,11 +197,13 @@ class Quantity(object):
         else:
             raise ValueError("The only possible values for delta are -1 (negative) 0 (zero) and 1 (positive)")
 
-# deze gebruiken we niet meer:
-    #def increaseDelta(self):
-        #return (self.delta + 1 in Quantity.deltadom)
-    #def decreaseDelta(self):
-        #return (self.delta - 1 in Quantity.deltadom)
+    def setExog(self):
+        self.exog = True
+
+    def increaseDelta(self):
+        return (self.delta + 1 in Quantity.deltadom)
+    def decreaseDelta(self):
+        return (self.delta - 1 in Quantity.deltadom)
 
 
     # def getNextValues(self):
@@ -227,32 +230,38 @@ class Quantity(object):
     #             posvals = [self.val]
     #     return posvals, delta
     def getNextValues(self):
-        delta = None
+        nextDeltas = None
         if self.delta == -1:      #check if derivative is negative
             if self.decreaseValue():
-                posvals = [self.val, self.val-1]
+                if self.val == Quantity.zpmdom[2]:
+                    """EPSILON ORDERING"""
+                    posvals = [self.val-1]
+                else: posvals = [self.val, self.val-1]
             else:
                 """CHECK OF DIT HOORT"""
-                delta = 0
-                # self.setDelta(0)
+                nextDeltas = [0]
                 posvals = [self.val]
         elif self.delta == 0:    #check if derivative is zero
             posvals = [self.val]
         else:
             if self.increaseValue():
-                posvals = [self.val, self.val+1]
+                if self.val == Quantity.zpmdom[0]:
+                    """EPSILON ORDERING"""
+                    posvals = [self.val+1]
+                else: posvals = [self.val, self.val+1]
             else:
                 """CHECK OF DIT HOORT"""
-                delta = 0
+                nextDeltas = [0]
                 # self.setDelta(0)
                 posvals = [self.val]
-        return posvals, delta
+        return posvals, nextDeltas
 
 
 
     def getNextDelta(self, rels):
         ambiguous = False
         signs = []
+        nextDeltas = [self.delta]
         for (relType, qt_a) in rels:
             val = qt_a.val
             delta = qt_a.delta
@@ -271,11 +280,16 @@ class Quantity(object):
         if 1 in signs and -1 in signs:
             #raise ValueError('Shit is AMBIGU!')
             ambiguous = True
-        new_delta = self.delta
         if 1 in signs:
-            if new_delta != 1:
-                new_delta += 1
+            if self.increaseDelta():
+                nextDeltas = [self.delta + 1]
         if -1 in signs:
-            if new_delta != -1:
-                new_delta -= 1
-        return new_delta , ambiguous
+            if self.decreaseDelta():
+                nextDeltas = [self.delta - 1]
+        """DERIVATIVES VAN EXOGENEOUS QTS KUNNEN IN ELKE STATE VERANDEREN"""
+        if self.exog:
+            if self.increaseDelta():
+                nextDeltas.append(self.delta + 1)
+            if self.decreaseDelta():
+                nextDeltas.append(self.delta -1)
+        return nextDeltas , ambiguous
