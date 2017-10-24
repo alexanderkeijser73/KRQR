@@ -44,6 +44,9 @@ class CausalModel(object):
                 self.vc[qt_a.name].append((qt_b.name, val_a, val_b))     #key van dict is nu "ontvangende" quantity
             if (qt_a.name, val_b, val_a) not in self.vc[qt_b.name]:
                 self.vc[qt_b.name].append((qt_a.name, val_b, val_a))     #key van dict is nu "ontvangende" quantity
+            qt_a.addVC(qt_b, val_a, val_b)
+        else: raise ValueError("One of the quanties is not defined in the system {}".format(self.name))
+
 
     def checkValidVC(self, state):
         valid = True
@@ -80,13 +83,13 @@ class CausalModel(object):
         states_to_explore = [init_state]
         connections = []
         while len(states_to_explore) > 0:
-
             print("States to explore: \n")
             for bli in states_to_explore:
                 print(bli.toTuples())
             print("\n")
             new_states_to_explore = []
-            for state in states_to_explore:
+            for i, state in enumerate(states_to_explore):
+                print("\tState {} to explore:\n\t----------------------------------------------------".format(i+1))
                 next_states = self.nextStates(state)
                 # print("New connections:\n")
                 # for bleh in next_states:
@@ -117,16 +120,13 @@ class CausalModel(object):
     def nextStates(self,state):
         nextStates = [[]]
         for qt in state.asList:
-            ambiguous = False
             qt_rels = self.rels[qt.name]
-            nextValues, nextDeltas = qt.getNextValues()
-            # nextDelta = qt.getNextDelta(qt_rels)
+            nextValues, nextDeltas = state.getNextValues(qt)
+            # nextDelta = qt.getNextDeltas(qt_rels)
             if nextDeltas is None:
-                nextDeltas, ambiguous = qt.getNextDelta(qt_rels)
-            if ambiguous:
-                break
-            # print("nextValues for {}: {}".format(qt.name,nextValues))
-            # print("nextDelta for {}: {}\n".format(qt.name, nextDeltas))
+                nextDeltas = qt.getNextDeltas(qt_rels)
+            print("\tnextValues for {}: {}".format(qt.name,nextValues))
+            print("\tnextDeltas for {}: {}\n".format(qt.name, nextDeltas))
             nextStatesPerQt = []
             for nextDelta in nextDeltas:
                 for nextValue in nextValues:
@@ -136,10 +136,9 @@ class CausalModel(object):
                     nextStatesPerQt.append(qtcopy)
             nextStates = [i+[j] for i in nextStates for j in nextStatesPerQt]
             # print("Shape nextStates: ".format(shape(nextStates)))
-        if not(ambiguous):
             nonValidStates = []
             for nextState in nextStates:
-                if not(self.checkValidVC(nextState)) or CausalModel.isSame(State(nextState), state):
+                if CausalModel.isSame(State(nextState), state): #if weggehaald: not(self.checkValidVC(nextState))
                     nonValidStates.append(nextState)
             for nextState in nonValidStates:
                 nextStates.remove(nextState)
@@ -162,6 +161,43 @@ class State(object):
 
     def addQt(self, qt):
         return self.asList.append(qt)
+
+    def getNextValues(self, qt):
+        nextDeltas = None
+        qt_vc = qt.vc
+        # if qt_vc is not None:
+        #     qt_a_name = qt.vc[0].name
+        #     qt_a_val = qt.vc[1]
+        #     for (qt_name,val,delta) in self.toTuples():
+        #         if qt_a_name == qt_name and qt_a_val == val:
+        #             if not qt.increaseValue() and qt.delta ==0:
+        #                 nextDeltas = [0]
+        #             elif not qt.decreaseValue() and qt.delta ==0:
+        #                 nextDeltas = [0]
+        #             return [qt_a_val], nextDeltas
+        if qt.delta == -1:      #check if derivative is negative
+            if qt.decreaseValue():
+                if qt.val == Quantity.zpmdom[2]:
+                    """EPSILON ORDERING"""
+                    posvals = [qt.val-1]
+                else: posvals = [qt.val, qt.val-1]
+            else:
+                """CHECK OF DIT HOORT"""
+                nextDeltas = [0]
+                posvals = [qt.val]
+        elif qt.delta == 0:    #check if derivative is zero
+            posvals = [qt.val]
+        else:                    #derivative is positive
+            if qt.increaseValue():
+                if qt.val == Quantity.zpmdom[0]:
+                    """EPSILON ORDERING"""
+                    posvals = [qt.val+1]
+                else: posvals = [qt.val, qt.val+1]
+            else:
+                """CHECK OF DIT HOORT"""
+                nextDeltas = [0]
+                posvals = [qt.val]
+        return posvals, nextDeltas
 
 
 class Entity(object):
@@ -194,6 +230,7 @@ class Quantity(object):
         self.delta = None
         self.name = name
         self.exog = False
+        self.vc = None
 
     def setValue(self, val):
         if val in self.dom[1]:
@@ -222,63 +259,11 @@ class Quantity(object):
         return (self.delta - 1 in Quantity.deltadom)
 
 
-    # def getNextValues(self):
-    #     delta = None
-    #     if self.delta == -1:      #check if derivative is negative
-    #         if self.val == Quantity.zpmdom[2]:
-    #             posvals = [self.val-1]
-    #         elif self.val == Quantity.zpmdom[1]:
-    #             posvals = [self.val-1, self.val]
-    #             # self.setDelta(0) moet in bepaalde tak komen..
-    #         else:
-    #             delta = 0
-    #             posvals = [self.val]
-    #     elif self.delta == 0:    #check if derivative is zero
-    #         posvals = [self.val]
-    #     else:
-    #         if self.val == Quantity.zpmdom[0]:
-    #             posvals = [self.val+1]
-    #         elif self.val == Quantity.zpmdom[1]:
-    #             posvals = [self.val, self.val+1]
-    #             # self.setDelta(0) moet in bepaalde tak komen..
-    #         else:
-    #             delta = 0
-    #             posvals = [self.val]
-    #     return posvals, delta
-    def getNextValues(self):
-        nextDeltas = None
-        if self.delta == -1:      #check if derivative is negative
-            if self.decreaseValue():
-                if self.val == Quantity.zpmdom[2]:
-                    """EPSILON ORDERING"""
-                    posvals = [self.val-1]
-                else: posvals = [self.val, self.val-1]
-            else:
-                """CHECK OF DIT HOORT"""
-                nextDeltas = [0]
-                posvals = [self.val]
-        elif self.delta == 0:    #check if derivative is zero
-            posvals = [self.val]
-        else:                    #derivative is positive
-            if self.increaseValue():
-                if self.val == Quantity.zpmdom[0]:
-                    """EPSILON ORDERING"""
-                    posvals = [self.val+1]
-                else: posvals = [self.val, self.val+1]
-            else:
-                """CHECK OF DIT HOORT"""
-                nextDeltas = [0]
-                # self.setDelta(0)
-                posvals = [self.val]
-        return posvals, nextDeltas
-
-
-
-    def getNextDelta(self, rels):
-        ambiguous = False
+    def getNextDeltas(self, rels):
         signs = []
         nextDeltas = [self.delta]
         for (relType, qt_a) in rels:
+            """Dit kan volgens mij helemaal niet de geupdate waarde zijn, hoe kon dit goed gaan?"""
             val = qt_a.val
             delta = qt_a.delta
             if relType == 'i+':
@@ -297,19 +282,22 @@ class Quantity(object):
                     signs.append(-1)
                 elif delta == -1:
                     signs.append(1)
+        print("Quantity {} heeft signs {}\n".format(self.name, signs))
         if 1 in signs and -1 in signs:
-            #raise ValueError('Shit is AMBIGU!')
-            ambiguous = True
+                nextDeltas = self.deltadom
         if 1 in signs:
             if self.increaseDelta():
                 nextDeltas = [self.delta + 1]
-        if -1 in signs:
-            if self.decreaseDelta():
-                nextDeltas = [self.delta - 1]
+        # if -1 in signs:
+        #     if self.decreaseDelta():
+        #         nextDeltas = [self.delta - 1]
         """DERIVATIVES VAN EXOGENEOUS QTS KUNNEN IN ELKE STATE VERANDEREN"""
-        if self.exog:
-            if self.increaseDelta():
-                nextDeltas.append(self.delta + 1)
-            if self.decreaseDelta():
-                nextDeltas.append(self.delta -1)
-        return nextDeltas , ambiguous
+        # if self.exog:
+        #     if self.increaseDelta():
+        #         nextDeltas.append(self.delta + 1)
+        #     if self.decreaseDelta():
+        #         nextDeltas.append(self.delta -1)
+        return nextDeltas
+
+    def addVC(self, qt_b, val_a, val_b):
+        self.vc = (qt_b, val_a, val_b)
