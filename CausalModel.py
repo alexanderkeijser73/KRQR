@@ -29,7 +29,7 @@ class CausalModel(object):
         qts = self.getState()
         if rel in CausalModel.pos_rels and qt_a in qts.asList and qt_a in qts.asList:
             if (rel, qt_a) not in self.rels[qt_b.name]:
-                self.rels[qt_b.name].append((rel, qt_a))     #key van dict is nu "ontvangende" quantity
+                self.rels[qt_b.name].append((rel, qt_a.name))     #key van dict is nu "ontvangende" quantity
         else:
             raise ValueError("Either one of the quantities or the relationship is not defined")
 
@@ -98,23 +98,17 @@ class CausalModel(object):
                 state_connections = [(state,next_state) for next_state in next_states]
                 for next_state in next_states:
                     deltas = [qt.delta for qt in next_state.asList]
-                    explored_state_vals = [explored_state.toTuples() for explored_state in explored_states]
-                    if not next_state.toTuples() in explored_state_vals:
+                    new_states_to_explore_vals = [i.toTuples() for i in new_states_to_explore]
+                    if not next_state.toTuples() in new_states_to_explore:
                         new_states_to_explore.append(next_state)
-                    # else: print("Already explored: {}\n".format(next_state.toTuples()))
-                    # else: print("Derivative termination")
-                if not state in explored_states:
+                explored_state_vals = [explored_state.toTuples() for explored_state in explored_states]
+                if not state.toTuples() in explored_state_vals:
                     explored_states.append(state)
-                # print("All explored states: {}\n".format(explored_state_vals))
-                # else: print("Already in explored states\n")
-                # states_to_explore.remove(state)
             states_to_explore = new_states_to_explore
-            explored_state_vals = [explored_state.toTuples() for explored_state in explored_states]
             print("All explored states:\n")
             for bla in explored_state_vals:
                 print(bla)
             print("\n------------------------------------------------------------\n")
-            # print("States to explore: ",[state.toTuples() for state in states_to_explore], "\n")
         return explored_states, connections
 
     def nextStates(self,state):
@@ -122,9 +116,8 @@ class CausalModel(object):
         for qt in state.asList:
             qt_rels = self.rels[qt.name]
             nextValues, nextDeltas = state.getNextValues(qt)
-            # nextDelta = qt.getNextDeltas(qt_rels)
             if nextDeltas is None:
-                nextDeltas = qt.getNextDeltas(qt_rels)
+                nextDeltas = state.getNextDeltas(qt,qt_rels)
             print("\tnextValues for {}: {}".format(qt.name,nextValues))
             print("\tnextDeltas for {}: {}\n".format(qt.name, nextDeltas))
             nextStatesPerQt = []
@@ -138,7 +131,10 @@ class CausalModel(object):
             # print("Shape nextStates: ".format(shape(nextStates)))
             nonValidStates = []
             for nextState in nextStates:
-                if CausalModel.isSame(State(nextState), state): #if weggehaald: not(self.checkValidVC(nextState))
+                # if not(self.checkValidVC(nextState)):
+                #     nonValidStates.append(nextState)
+                #     print("State removed because not valid with VC: \n{}".format(State(nextState).toTuples()))
+                if CausalModel.isSame(State(nextState), state):
                     nonValidStates.append(nextState)
             for nextState in nonValidStates:
                 nextStates.remove(nextState)
@@ -165,16 +161,16 @@ class State(object):
     def getNextValues(self, qt):
         nextDeltas = None
         qt_vc = qt.vc
-        # if qt_vc is not None:
-        #     qt_a_name = qt.vc[0].name
-        #     qt_a_val = qt.vc[1]
-        #     for (qt_name,val,delta) in self.toTuples():
-        #         if qt_a_name == qt_name and qt_a_val == val:
-        #             if not qt.increaseValue() and qt.delta ==0:
-        #                 nextDeltas = [0]
-        #             elif not qt.decreaseValue() and qt.delta ==0:
-        #                 nextDeltas = [0]
-        #             return [qt_a_val], nextDeltas
+        if qt_vc is not None:
+            qt_a_name = qt.vc[0].name
+            qt_a_val = qt.vc[1]
+            for (qt_name,val,delta) in self.toTuples():
+                if qt_a_name == qt_name and qt_a_val == val:
+                    if not qt.increaseValue() and qt.delta ==0:
+                        nextDeltas = [0]
+                    elif not qt.decreaseValue() and qt.delta ==0:
+                        nextDeltas = [0]
+                    return [qt_a_val], nextDeltas
         if qt.delta == -1:      #check if derivative is negative
             if qt.decreaseValue():
                 if qt.val == Quantity.zpmdom[2]:
@@ -198,6 +194,47 @@ class State(object):
                 nextDeltas = [0]
                 posvals = [qt.val]
         return posvals, nextDeltas
+
+    def getNextDeltas(self,qt, rels):
+        signs = []
+        nextDeltas = [qt.delta]
+        for (relType, qt_a) in rels:
+            for qt_in_state in self.asList:
+                if qt_in_state.name == qt_a:
+                    val = qt_in_state.val
+                    delta = qt_in_state.delta
+            if relType == 'i+':
+                if val != 0:
+                    signs.append(1)
+            if relType == 'i-':
+                if val != 0:
+                    signs.append(-1)
+            if relType == 'p+':
+                if delta == 1:
+                    signs.append(1)
+                elif delta == -1:
+                    signs.append(-1)
+            if relType == 'p-':
+                if delta == 1:
+                    signs.append(-1)
+                elif delta == -1:
+                    signs.append(1)
+        if 1 in signs and -1 in signs:
+                nextDeltas = qt.deltadom
+        if 1 in signs:
+            if qt.increaseDelta():
+                nextDeltas = [qt.delta + 1]
+        if -1 in signs:
+            if qt.decreaseDelta():
+                nextDeltas = [qt.delta - 1]
+        """DERIVATIVES VAN EXOGENEOUS QTS KUNNEN IN ELKE STATE VERANDEREN"""
+        if qt.exog:
+            if qt.increaseDelta():
+                nextDeltas.append(qt.delta + 1)
+            if qt.decreaseDelta():
+                nextDeltas.append(qt.delta -1)
+        return nextDeltas
+
 
 
 class Entity(object):
@@ -257,47 +294,6 @@ class Quantity(object):
         return (self.delta + 1 in Quantity.deltadom)
     def decreaseDelta(self):
         return (self.delta - 1 in Quantity.deltadom)
-
-
-    def getNextDeltas(self, rels):
-        signs = []
-        nextDeltas = [self.delta]
-        for (relType, qt_a) in rels:
-            """Dit kan volgens mij helemaal niet de geupdate waarde zijn, hoe kon dit goed gaan?"""
-            val = qt_a.val
-            delta = qt_a.delta
-            if relType == 'i+':
-                if val != 0:
-                    signs.append(1)
-            if relType == 'i-':
-                if val != 0:
-                    signs.append(-1)
-            if relType == 'p+':
-                if delta == 1:
-                    signs.append(1)
-                elif delta == -1:
-                    signs.append(-1)
-            if relType == 'p-':
-                if delta == 1:
-                    signs.append(-1)
-                elif delta == -1:
-                    signs.append(1)
-        print("Quantity {} heeft signs {}\n".format(self.name, signs))
-        if 1 in signs and -1 in signs:
-                nextDeltas = self.deltadom
-        if 1 in signs:
-            if self.increaseDelta():
-                nextDeltas = [self.delta + 1]
-        # if -1 in signs:
-        #     if self.decreaseDelta():
-        #         nextDeltas = [self.delta - 1]
-        """DERIVATIVES VAN EXOGENEOUS QTS KUNNEN IN ELKE STATE VERANDEREN"""
-        # if self.exog:
-        #     if self.increaseDelta():
-        #         nextDeltas.append(self.delta + 1)
-        #     if self.decreaseDelta():
-        #         nextDeltas.append(self.delta -1)
-        return nextDeltas
 
     def addVC(self, qt_b, val_a, val_b):
         self.vc = (qt_b, val_a, val_b)
