@@ -35,7 +35,7 @@ class CausalModel(object):
 
     def addVC(self, qt_a, val_a, qt_b, val_b):
         qts = self.getState()
-        if qt_a in qts.asList and qt_a in qts.asList:
+        if qt_a in qts.asList and qt_b in qts.asList:
             if val_a not in qt_a.dom[1]:
                 raise ValueError("Value of first quantity not valid")
             if val_b not in qt_b.dom[1]:
@@ -47,19 +47,6 @@ class CausalModel(object):
             qt_b.addVC(qt_a, val_a, val_b)
         else: raise ValueError("One of the quanties is not defined in the system {}".format(self.name))
 
-
-    def checkValidVC(self, state):
-        valid = True
-        for qt_b in state:
-            vcs = qt_b.vc
-            for (qt_a, qt_a_val, qt_b_val) in vcs:
-                for qt in state:
-                    if qt.name == qt_a.name:
-                        if qt.val == qt_a.val and qt_b.val != qt_b_val:
-                            print("\nChanged value of {} to {}\n".format(qt_b.name, qt_a.val))
-                            qt_b.setValue(qt_a.val)
-                            valid = False
-        return valid
 
     def getState(self):
         return State(list(itertools.chain(*[ent.qts for ent in self.ents])))
@@ -79,7 +66,10 @@ class CausalModel(object):
         explored_states = []
         states_to_explore = [init_state]
         connections = []
+        counter = 0
         while len(states_to_explore) > 0:
+            if counter ==10:
+                break
             print("States to explore: \n")
             for bli in states_to_explore:
                 print(bli.toTuples())
@@ -106,6 +96,7 @@ class CausalModel(object):
             for bla in explored_state_vals:
                 print(bla)
             print("\n------------------------------------------------------------\n")
+            counter +=1
         return explored_states, connections
 
     def nextStates(self,state):
@@ -130,8 +121,8 @@ class CausalModel(object):
             for nextState in nextStates:
                 # if not(self.checkValidVC(nextState)):
                 #     nonValidStates.append(nextState)
-                if not self.checkValidVC(nextState):
-                    print("\nUpdated state:\n{}\n".format(State(nextState).toTuples()))
+                if not State(nextState).checkValidVC():
+                    print("Updated state:\n{}\n".format(State(nextState).toTuples()))
                     # print("State removed because not valid with VC: \n{}".format(State(nextState).toTuples()))
                 if CausalModel.isSame(State(nextState), state):
                     nonValidStates.append(nextState)
@@ -237,7 +228,18 @@ class State(object):
                 nextDeltas.append(qt.delta -1)
         return nextDeltas
 
-
+    def checkValidVC(self):
+        valid = True
+        for qt_b in self.asList:
+            vcs = qt_b.vc
+            for (qt_a_name, qt_a_val, qt_b_val) in vcs:
+                for qt in self.asList:
+                    if qt.name == qt_a_name:
+                        if qt.val == qt_a_val and qt_b.val != qt_b_val:
+                            print("\n For state \n{}\nChange value of {} to {}\n".format(self.toTuples(),qt_b.name, qt_a_val))
+                            qt_b.setValue(qt_a_val)
+                            valid = False
+        return valid
 
 class Entity(object):
     """docstring for Entity."""
@@ -300,4 +302,4 @@ class Quantity(object):
         return (self.delta - 1 in Quantity.deltadom)
 
     def addVC(self, qt_a, val_a, val_b):
-        self.vc.append((qt_a, val_a, val_b))
+        self.vc.append((qt_a.name, val_a, val_b))
