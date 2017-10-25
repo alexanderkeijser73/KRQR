@@ -44,23 +44,20 @@ class CausalModel(object):
                 self.vc[qt_a.name].append((qt_b.name, val_a, val_b))     #key van dict is nu "ontvangende" quantity
             if (qt_a.name, val_b, val_a) not in self.vc[qt_b.name]:
                 self.vc[qt_b.name].append((qt_a.name, val_b, val_a))     #key van dict is nu "ontvangende" quantity
-            qt_a.addVC(qt_b, val_a, val_b)
+            qt_b.addVC(qt_a, val_a, val_b)
         else: raise ValueError("One of the quanties is not defined in the system {}".format(self.name))
 
 
     def checkValidVC(self, state):
         valid = True
-        for qt_a in state:
-            vcs = self.vc[qt_a.name]
-            for vc in vcs:
-                qt_b_name = vc[0]
-                qt_a_val = vc[1]
-                qt_b_val = vc[2]
-                for qt_b in state:
-                    if qt_b.name == qt_b_name:
-                        if qt_a.val == qt_a_val and qt_b.val != qt_b_val:
-                            valid = False
-                        elif qt_a.val != qt_a_val and qt_b.val == qt_b_val:
+        for qt_b in state:
+            vcs = qt_b.vc
+            for (qt_a, qt_a_val, qt_b_val) in vcs:
+                for qt in state:
+                    if qt.name == qt_a.name:
+                        if qt.val == qt_a.val and qt_b.val != qt_b_val:
+                            print("\nChanged value of {} to {}\n".format(qt_b.name, qt_a.val))
+                            qt_b.setValue(qt_a.val)
                             valid = False
         return valid
 
@@ -99,7 +96,7 @@ class CausalModel(object):
                 for next_state in next_states:
                     deltas = [qt.delta for qt in next_state.asList]
                     new_states_to_explore_vals = [i.toTuples() for i in new_states_to_explore]
-                    if not next_state.toTuples() in new_states_to_explore:
+                    if not next_state.toTuples() in new_states_to_explore_vals:
                         new_states_to_explore.append(next_state)
                 explored_state_vals = [explored_state.toTuples() for explored_state in explored_states]
                 if not state.toTuples() in explored_state_vals:
@@ -133,7 +130,9 @@ class CausalModel(object):
             for nextState in nextStates:
                 # if not(self.checkValidVC(nextState)):
                 #     nonValidStates.append(nextState)
-                #     print("State removed because not valid with VC: \n{}".format(State(nextState).toTuples()))
+                if not self.checkValidVC(nextState):
+                    print("\nUpdated state:\n{}\n".format(State(nextState).toTuples()))
+                    # print("State removed because not valid with VC: \n{}".format(State(nextState).toTuples()))
                 if CausalModel.isSame(State(nextState), state):
                     nonValidStates.append(nextState)
             for nextState in nonValidStates:
@@ -160,17 +159,17 @@ class State(object):
 
     def getNextValues(self, qt):
         nextDeltas = None
-        qt_vc = qt.vc
-        if qt_vc is not None:
-            qt_a_name = qt.vc[0].name
-            qt_a_val = qt.vc[1]
-            for (qt_name,val,delta) in self.toTuples():
-                if qt_a_name == qt_name and qt_a_val == val:
-                    if not qt.increaseValue() and qt.delta ==0:
-                        nextDeltas = [0]
-                    elif not qt.decreaseValue() and qt.delta ==0:
-                        nextDeltas = [0]
-                    return [qt_a_val], nextDeltas
+        # qt_vc = qt.vc
+        # if qt_vc is not None:
+        #     qt_a_name = qt.vc[0].name
+        #     qt_a_val = qt.vc[1]
+        #     for (qt_name,val,delta) in self.toTuples():
+        #         if qt_a_name == qt_name and qt_a_val == val:
+        #             if not qt.increaseValue() and qt.delta ==0:
+        #                 nextDeltas = [0]
+        #             elif not qt.decreaseValue() and qt.delta ==0:
+        #                 nextDeltas = [0]
+        #             return [qt_a_val], nextDeltas
         if qt.delta == -1:      #check if derivative is negative
             if qt.decreaseValue():
                 if qt.val == Quantity.zpmdom[2]:
@@ -221,12 +220,15 @@ class State(object):
                     signs.append(1)
         if 1 in signs and -1 in signs:
                 nextDeltas = qt.deltadom
+
         if 1 in signs:
             if qt.increaseDelta():
                 nextDeltas = [qt.delta + 1]
+                # qt.setDelta(qt.delta + 1)
         if -1 in signs:
             if qt.decreaseDelta():
                 nextDeltas = [qt.delta - 1]
+
         """DERIVATIVES VAN EXOGENEOUS QTS KUNNEN IN ELKE STATE VERANDEREN"""
         if qt.exog:
             if qt.increaseDelta():
@@ -256,18 +258,20 @@ class Quantity(object):
     zpmdom = [0,1,2]    #possible values for zero/positive/max domain
     deltadom = [-1,0,1] #possible values for derivative (delta)
 
-    def __init__(self, name, dom=None):
+    def __init__(self, name, dom=None, vc=None):
         if dom is None:
             self.dom = ('zpm',Quantity.zpmdom)
         elif dom == 'zp':
             self.dom = ('zp',Quantity.zpdom)
         else:
             raise ValueError("The only possible quantity domains are 'zpm' and 'zp'")
+        if vc is None:
+            self.vc = []
         self.val = None
         self.delta = None
         self.name = name
         self.exog = False
-        self.vc = None
+
 
     def setValue(self, val):
         if val in self.dom[1]:
@@ -295,5 +299,5 @@ class Quantity(object):
     def decreaseDelta(self):
         return (self.delta - 1 in Quantity.deltadom)
 
-    def addVC(self, qt_b, val_a, val_b):
-        self.vc = (qt_b, val_a, val_b)
+    def addVC(self, qt_a, val_a, val_b):
+        self.vc.append((qt_a, val_a, val_b))
