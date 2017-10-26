@@ -1,6 +1,7 @@
 import itertools
 from collections import defaultdict
 from copy import deepcopy
+import random
 
 class CausalModel(object):
     """docstring for CausalModel"""
@@ -70,8 +71,8 @@ class CausalModel(object):
     def isNewConnection(nextState, state, connections):
         isNewConnection = True
         for connection in connections:
-            state_a = connection[0].toTuples()
-            state_b = connection[1].toTuples()
+            state_a = connection[0]
+            state_b = connection[1]
             if state_a == state and state_b == nextState:
                 isNewConnection = False
         return isNewConnection
@@ -121,6 +122,7 @@ class CausalModel(object):
         explored_states = []
         states_to_explore = [init_state]
         connections = []
+
         # loop as long as there are states to explore
         while len(states_to_explore) > 0:
             # print states which we will explore
@@ -143,10 +145,10 @@ class CausalModel(object):
                 for next_state in next_states:
                     next_state_vals = next_state.toTuples()
                     new_states_to_explore_vals = [new_state.toTuples() for new_state in new_states_to_explore]
-                    if not next_state_vals in new_states_to_explore_vals and not next_state_vals in explored_state_vals:
+                    if next_state_vals not in new_states_to_explore_vals and next_state_vals not in explored_state_vals:
                         new_states_to_explore.append(next_state)
                     if self.isNewConnection(next_state_vals, state.toTuples(), connections):
-                        connections.append((state,next_state))
+                        connections.append((state.toTuples(), next_state_vals))
             # reset states_to_explore
             states_to_explore = new_states_to_explore
             # print all explored states
@@ -230,10 +232,16 @@ class State(object):
                 nextDeltas = [qt.delta - 1]
         """DERIVATIVES VAN EXOGENEOUS QTS KUNNEN IN ELKE STATE VERANDEREN"""
         if qt.exog:
-            if qt.increaseDelta():
-                nextDeltas.append(qt.delta + 1)
-            if qt.decreaseDelta():
-                nextDeltas.append(qt.delta -1)
+            if qt.delta == -1:
+                nextDeltas = [random.choice([-1,0])]
+            if qt.delta == 0:
+                nextDeltas = [random.choice(qt.deltadom)]
+            if qt.delta == 1:
+                nextDeltas = [random.choice([0,1])]
+            #if qt.increaseDelta():
+                #nextDeltas.append(qt.delta + 1)
+            #if qt.decreaseDelta():
+                #nextDeltas.append(qt.delta -1)
         return nextDeltas
 
 class Entity(object):
